@@ -61,6 +61,6 @@ response = cadeia.invoke(
     {
         "interesse" : "videogames e tecnologia"
     }
-)          # Gera a resposta do modelo com base no prompt fornecido
+)
 
-print(response)                           # Imprime a resposta gerada pelo modelo
+print(response)
