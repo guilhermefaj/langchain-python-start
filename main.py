@@ -1,15 +1,49 @@
 from langchain_openai import ChatOpenAI          # Importa a classe ChatOpenAI da biblioteca langchain_openai
+from langchain.prompts import PromptTemplate     # Importa a classe PromptTemplate da biblioteca langchain.prompts
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+from pydantic import Field, BaseModel 
+from langchain.globals import set_debug
 from dotenv import load_dotenv                   # Permite carregar variáveis de ambiente a partir de um arquivo .env
 import os                                        # Puxar as variáveis de ambiente do sistema operacional
 
-load_dotenv()                                    # Carrega as variáveis de ambiente do arquivo .env
-api_key = os.getenv("OPENAI_API_KEY")            # Obtém a chave da API da OpenAI das variáveis de ambiente
+set_debug(True)
 
-numero_dias = 7
-numero_criancas = 2
-tipo_atividade = "aventura e natureza"
+load_dotenv()
+api_key = os.getenv("OPENAI_API_KEY")
 
-prompt = f"crie um roteiro de viagem de {numero_dias} dias para {numero_criancas} crianças com atividades de {tipo_atividade}."
+class Destino(BaseModel):
+    cidade: str = Field("A cidade recomendada para visitar"),
+    motivo: str = Field("O motivo pelo qual a cidade é recomendada")
+
+class Restaurantes(BaseModel):
+    cidade: str = Field("A cidade recomendada para visitar"),
+    Restaurantes: str = Field("Os melhores restaurantes na cidade recomendada")
+
+parseador_destino = JsonOutputParser(pydantic_object=Destino)
+parseador_restaurantes = JsonOutputParser(pydantic_object=Restaurantes)
+
+prompt_cidade = PromptTemplate(
+    template="""
+    Sugira uma cidade dado o meu interesse por {interesse}.
+    {formato_de_saida}
+    """,
+    input_variables=["interesse"],
+    partial_variables={"formato_de_saida": parseador_destino.get_format_instructions()}
+)
+
+prompt_restaurantes = PromptTemplate(
+    template="""
+    Sugira os melhores restaurantes na cidade {cidade}.
+    {formato_de_saida}
+    """,
+    partial_variables={"formato_de_saida": parseador_restaurantes.get_format_instructions()}
+)
+
+prompt_cultural = PromptTemplate(
+    template="""
+    Sugira atividades culturais na cidade {cidade}.
+    """
+)
 
 modelo = ChatOpenAI(
     model="gpt-3.5-turbo",
@@ -17,6 +51,16 @@ modelo = ChatOpenAI(
     api_key=api_key
 )
 
-response = modelo.invoke(prompt)          # Gera a resposta do modelo com base no prompt fornecido
+cadeia1 = prompt_cidade | modelo | parseador_destino
+cadeia2 = prompt_restaurantes | modelo | parseador_restaurantes
+cadeia3 = prompt_cultural | modelo | StrOutputParser()
 
-print(response.content)                           # Imprime a resposta gerada pelo modelo
+cadeia = (cadeia1 | cadeia2 | cadeia3)
+
+response = cadeia.invoke(
+    {
+        "interesse" : "videogames e tecnologia"
+    }
+)          # Gera a resposta do modelo com base no prompt fornecido
+
+print(response)                           # Imprime a resposta gerada pelo modelo
